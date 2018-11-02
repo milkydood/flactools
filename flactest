@@ -1,0 +1,112 @@
+#!/usr/bin/perl
+
+# andyw 20110922 - test a whole bunch of flacs.
+# Usage is $0 [-d] a.flac a/dir/of/flacs /dir
+
+# is'd be nice if the perl flac decoding libs worked proper, or if I could
+# reliably pipe a series of flacs to flac -t and have it report brokenness.
+# But i can't.
+
+use threads;
+use strict;
+
+my (@totest, @failed, $cpus, $thr, $total, @testcmd, $debug);
+
+$debug = $ARGV[0] eq '-d' ? 1 : 0;
+shift @ARGV if $debug;
+
+splice @totest,@totest, -1, get_flacs($_) for @ARGV;
+
+$total		= scalar @totest;
+@testcmd	= qw(/usr/bin/flac --totally-silent -t);
+$cpus		= get_cpus();
+
+while (@totest) {
+	while (threads->list(threads::running) < $cpus && @totest) {
+		# set a return type for the read, to avoid a void return val
+		$thr = threads->create('do_test', shift @totest, @testcmd);
+	}
+
+	sleep 1;
+
+	# tidy up finished threads
+
+	for $thr (threads->list()) {
+		if (! $thr->is_running() && $thr->is_joinable()) {
+			add_fails($thr->join());
+		}
+	}
+
+}
+
+for (threads->list()) {
+	add_fails($_->join());
+}
+
+if (scalar @failed) {
+	print "These failed (" . (scalar @failed) ." of $total) :\n";
+	print join"\n",@failed;
+	print "\n";
+
+	exit 1;
+} else {
+	print "All OK - $total checked\n";
+	exit 0;
+}
+
+sub get_flacs {
+	my @flacs;
+	my $dirent = shift;
+	
+	$dirent =~s#/+#/#og;
+
+	if (! -d $dirent && $dirent =~ /flac$/) {
+		return $dirent if -f $dirent;
+	}
+
+	if (! opendir(D, $dirent)) {
+		warn "Can't open $dirent - $!";
+		return;
+	}
+
+	for (sort grep !/^\.\.?$/, readdir(D)) {
+		next unless (/flac$/ || -d "$dirent/$_");
+
+		splice @flacs, @flacs, 0, -d "$dirent/$_" ?
+			get_flacs("$dirent/$_") :
+			"$dirent/$_";
+	}
+
+	closedir(D);
+
+	return @flacs;
+}
+
+
+sub get_cpus {
+	open(C,"/proc/cpuinfo");
+	my $cpus = scalar grep /^processor/, <C>;
+	close(C);
+
+	return $cpus;
+}
+
+# this just returns the fails.
+sub do_test {
+	my ($source, @command) = @_;
+
+	my $ret = system(@command, $source) >> 8;
+
+	if ($ret == 0) {
+		print "OK     $source.\n" if $debug;
+		return
+	} else {
+		print "FAILED $source.\n" if $debug;
+		return $source;
+	}
+}
+
+sub add_fails {
+	my $f = shift;
+	push @failed, $f if length $f;
+}

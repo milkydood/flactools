@@ -1,0 +1,145 @@
+#!/usr/bin/perl
+
+use Audio::FLAC::Header;
+use utf8;
+use strict;
+
+my ($f, $ok, @files);
+my @fields = qw/Title Artist Album Date Comment Genre Tracknumber/;
+
+# config/defaults
+my %config = (
+	rename => 1,
+	artist => 0,
+);
+
+# process args
+while ($f = shift @ARGV) {
+	$ok = 0;
+
+	if (-f $f ) { push @files, $f; $ok = 1}
+
+	for (@fields) {
+		if ($f =~ /^\-\-no\-$_/i) {
+			$config{skip}{$_} = 1;
+			$ok = 1;
+		} elsif ($f =~ /^\-\-$_/i) {
+			$config{default}{$_} = shift @ARGV;
+			$ok = 1;
+		}
+	}
+
+	if ($f eq '--no-rename') {
+		$config{rename} = 0;
+		$ok = 1;
+	}
+	if ($f eq '--with-artist') {
+		$config{artist} = 1;
+		$ok = 1;
+	}
+
+	die "Unknown tag/no file $f" unless $ok;
+}
+
+for (@files) {
+	edit_tag($_);
+}
+
+sub mk_utf8 {
+        my $x = shift;
+       # utf8::upgrade($x);
+        return $x;
+}
+
+sub rationalise_strings {
+	my $str = shift;
+	print "$str\n";
+	$str =~s/&/and/og;
+	$str =~s/[ \:\/]/_/og;
+	$str =~s/[^\w\-\_]//og;
+	$str =~s/_+-+_+/-/og;
+	$str =~s/__+/_/og;
+	$str = ucfirst(lc($str));
+
+	return $str;
+}
+
+sub rationalise_fields {
+	my $f = shift;
+	$f=~y/A-Z/a-z/;
+	return ucfirst($f);
+}
+
+sub edit_tag {
+	my $file = shift;
+	my ($f, $ftag, $flac, $src, $song, $artist, $newtag, $changed, $skip);
+
+	print "$file:\n";
+	if (index($file,'/')>-1) {
+		($src = $file) =~ s|[^/]+$||;
+	} else {
+		$src = '';
+	}
+
+	$flac = Audio::FLAC::Header->new($file);
+	die "Can't get FLAC header - $!" unless $flac;
+
+	$ftag = $flac->tags();
+	die "Can't get flac tags - $!" unless $ftag;
+
+	$changed = 0;
+
+	for $f (@fields) {
+		$skip	= exists $config{skip}{$f} ? 1 : 0;
+		print "\t[$f] ";
+		if ($config{default}{$f} || '') {
+			print "$config{default}{$f}\n";
+			$$ftag{$f} = mk_utf8($config{default}{$f});
+			$changed = 1;
+			next;
+		}
+		$f	= ((grep /^$f$/i,keys %$ftag)[0] || $f);
+		if (! length($$ftag{$f} || '')) {
+
+			print '("") ';
+
+			if ($skip ) {
+				$newtag = ''; print "\n";
+			} else {
+				print '---> ';
+				$newtag = <>;
+			}
+			chop($newtag);
+			if ($newtag =~/\w+/) {
+				$$ftag{$f} = mk_utf8($newtag);
+				$changed = 1;
+			}
+		} else { print "$$ftag{$f}\n"; }
+		#$$f{ucfirst(lc($_))} = $$m{$_}
+		$$ftag{rationalise_fields($f)} = delete $$ftag{$f};
+	}
+
+	if ($changed) {
+		print "*** NEW TAG WRITTEN ***\n";
+		$flac->write() || warn $!;
+	}
+
+	$song = $$ftag{Title} || $$ftag{(grep /^Title$/i,keys %$ftag)[0]};
+	$artist = $$ftag{Artist} || $$ftag{(grep /^Artist$/i,keys %$ftag)[0]};
+
+	$song = rationalise_strings($song) . '.flac';
+	if ($config{'artist'}) {
+		$song = rationalise_strings($artist) . '-' . $song;
+		print ".\n";
+	}
+	$song = $src . $song;
+
+	if ($config{rename}) {
+		if ($file ne $song && ! -e $song) {
+			print "$file -> $song";
+			rename $file, $song;
+		} else { print "$song exists; not renaming\n"; }
+	} else { print "No-rename requested\n"; }
+		
+	print "\n";
+}

@@ -1,0 +1,68 @@
+#!/usr/bin/perl
+
+use threads;
+
+use strict;
+
+my $cpus	= get_cpus();
+my @toencode	= get_wavs();
+my $encode	= 'flac';
+my @encflags	= ('-8', '-s', '-V');
+#my @encflags	= ('--silent', '--r3mix');
+#my @encflags	= ('--silent', '--preset','extreme');
+my ($thr, @thr, $source);
+
+
+while (@toencode) {
+	while ($thr < $cpus && @toencode) {
+		$source = shift @toencode;
+		$source && push @thr, threads->create('do_encode',$encode, \@encflags, $source);
+		$thr++;
+	}
+
+	sleep 1;
+
+	$thr=threads->list(threads::running);
+}
+
+#system('metaflac','--add-replay-gain',map {s/wav/flac/;} @toencode);
+
+# they should now all have either finished or started
+# their binary in a thread. Wait until they don't block
+# and then join (ie wait) on them
+
+while ($thr>0 && threads->list(threads::running)) {
+	
+	sleep 1;
+
+	for my $thread (@thr) {
+		if ($thread->is_joinable()) {
+			$thr++;
+			$thread->join();
+		}
+	}
+}
+
+sub get_wavs {
+	my @wavs;
+
+	opendir(D,$ARGV[0] || '.') || die "$?";
+	@wavs = grep /\.wav$/,(readdir(D));
+	closedir(D);
+
+	return @wavs;
+}
+
+sub get_cpus {
+	open(C,"/proc/cpuinfo");
+	my $cpus = scalar grep /^processor/, <C>;
+	close(C);
+
+	return $cpus;
+}
+
+sub do_encode {
+	my ($command, $flags, $source, $dest) = @_;
+	print "Encoding $source...\n";
+	return system($command, @$flags, $source);
+}

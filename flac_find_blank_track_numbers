@@ -1,0 +1,4 @@
+#!/bin/sh
+FLAC=/home/system/flac
+
+cd $FLAC && for i in `find . -type f -name *flac`; do echo -n "$i: "; flacinfo $i |grep Tracknumber; done |grep "Tracknumber: $"

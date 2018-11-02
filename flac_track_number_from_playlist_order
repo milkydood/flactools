@@ -1,0 +1,2 @@
+#!/bin/sh
+A=0; for i in `cat $1`; do A=$[ $A + 1 ]; echo flactag --no-genre --tracknumber $A $i; done

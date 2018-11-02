@@ -1,0 +1,56 @@
+#!/usr/bin/perl
+
+#BUGS?  assumes flac files are all in pwd.
+use Audio::FLAC::Header;
+use MP3::Info;
+use Encode;
+use strict;
+
+my ($tno, $f, $m, $srcpath, $src, $dst, $flac,@dst);
+my @fields = qw/TITLE ARTIST ALBUM YEAR COMMENT GENRE TRACKNUM COMPOSER/;
+
+die "Usage: $0 playlist.m3u" unless $ARGV[0] =~ /\.m3u/;
+
+$srcpath = ($ARGV[0] =~ /(.*)\/\w+\.\w+/)[0];
+
+open (M3U, shift @ARGV)  || die "Can't open playlist";
+open (FLACU, '>playlist.txt')  || die "Can't write new playlist";
+while (<M3U>) {
+	chop;
+	next if /^\s*#/;
+
+	$tno++;
+
+	if ( ! ($m = get_mp3tag($src = "$srcpath/$_"))) {
+		warn "Can't get tag for $_";
+		next;
+	}
+	$dst = 'track' . sprintf("%02d", $tno) . '.cdda.flac';
+
+	if ($flac = Audio::FLAC::Header->new($dst)) {
+		$f = $flac->tags() ||die "Can't get flac tags - $!";
+
+		for (@fields) {
+			$$f{ucfirst(lc($_))} = encode('utf8',$$m{$_})
+				if length $$m{$_};
+		}
+		$$f{'Tracknumber'} = delete $$f{'Tracknum'};
+		$$f{'Date'} = delete $$f{'Year'} if $$f{'Year'};
+		die "First track is not 1, check manually playorder." if $tno eq 1 && $$f{'Tracknumber'} ne 1;
+
+		$flac->write() || warn $!;
+
+		$src =~m/([^\/]+)(?:.mp3)$/;
+
+		if (length $1) {
+	 		rename $dst, "$1.flac";
+			print FLACU "$1.flac\n";
+			push @dst, "$1.flac";
+		}
+
+	} else {
+		warn "Couldn't get header for $f";
+	}
+}
+
+system('metaflac','--add-replay-gain',@dst);

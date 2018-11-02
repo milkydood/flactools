@@ -1,0 +1,23 @@
+#!/usr/bin/perl
+
+use Audio::FLAC::Header;
+
+my (%t, %m, $f, $i, $flac, $tn);
+
+for $f (@ARGV) {
+	if ($flac = Audio::FLAC::Header->new($f)) {
+		$i = $flac->tags();
+		$tn = (grep /tracknum/i, keys %$i)[0];
+		warn "No track number for $f" unless $tn;
+		$t{$f} = $$i{$tn} || 'ndef';	# tag track num
+		$m{$f} = (stat($f))[9];			# mtime
+	} else {
+		warn "Couldn't get header for $f";
+	}
+}
+
+## try track order, fall-back to mtime.
+for (sort { $t{$a} != $t{$b} ? $t{$a} <=> $t{$b} : $m{$a} <=> $m{$b}  }keys %t) {
+	#print "$_ $t{$_} $m{$_}\n";
+	print "$_\n";
+}

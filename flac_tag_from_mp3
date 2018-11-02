@@ -1,0 +1,28 @@
+#!/usr/bin/perl
+
+use Audio::FLAC::Header;
+use MP3::Info;
+use Encode;
+use strict;
+
+my ($f, $m, $src, $dst, $flac);
+my @fields = qw/TITLE ARTIST ALBUM YEAR COMMENT GENRE TRACKNUM/;
+
+$m = get_mp3tag($src = shift @ARGV) || die "Can't get tag for $_";
+
+if (! ($flac = Audio::FLAC::Header->new($dst = shift @ARGV))) {
+	die "Couldn't get header for $f";
+}
+
+$f = $flac->tags() ||die "Can't get flac tags - $!";
+
+$$f{ucfirst(lc($_))}	= encode('utf8',($$m{$_})) for @fields;
+$$f{'Tracknumber'}	= delete $$f{'Tracknum'};
+
+$flac->write() || warn $!;
+
+$src =~m/([^\/]+)(?:.mp3)$/;
+
+rename $dst, "$1.flac" if length $1;
+
+exit 0;

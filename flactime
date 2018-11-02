@@ -1,0 +1,196 @@
+#!/usr/bin/perl
+
+use strict;
+
+use lib "$ENV{HOME}/lib/perl5";
+
+use AW::Flacutil qw(:all);
+use Audio::FLAC::Header;
+
+our ($osize, $size, $files, $read, $dudf, $dudl, $dirs, $links, $pic) = (0,0,0,0,0,0,0,0);
+our ($t,@filespecs, %artists, %comments, $min, $max, $mint, $maxt);
+
+my %config = (
+	picmode => 'a',
+	verbose => 0,
+	nozeroes => 0,
+	artistdump => 1,
+	commentsdump => 1,
+);
+
+die "Usage: $0 /path/to/flac /other/path/to/flac" unless length($ARGV[0]||'');
+
+for (@ARGV) {
+	if (/^-([pP])$/) {
+		$config{picmode} = $1;
+		next;
+	}
+	if ($_ eq '-v') { $config{verbose} = 1; next; }
+	if ($_ eq '-z') { $config{nozeroes} = 1; next; }
+	if ($_ eq '-a') { $config{artistdump} = 0; next; }
+	if ($_ eq '-c') { $config{commentsdump} = 0; next; }
+	push @filespecs, $_;
+}
+
+for (@filespecs) {
+	$t+=(process_dir($_))[0];
+}
+
+print "\n" . plural(scalar keys %artists, "artist") . " found\n";
+print "\nTotal: " . sane_time($t);
+print " ($t secs/" . sprintf("%0.3f",($t/(60*60*24*365.25)));
+print " years) in $files files (managed to read $read,";
+printf " %0d pictured [",$pic;
+printf $pic && $read ? ("%3d", ($pic / $read) * 100 ) : "0";
+print "%]; $dudf were ignored), $links links ($dudl were ignored) and ";
+print "$dirs directories; on disc: $size bytes / " . sane_size($size) . "; originally $osize bytes / " ;
+print (sane_size($osize));
+if ($osize && $size) { printf(" [%3d%]\n", int( ($size/$osize) * 100)); }
+else {print " [  0%]\n"; }
+
+print "max: " . sane_time($max) . " ($maxt)\nmin: ".sane_time($min) . " ($mint)\n";
+print "avg: "  . (($t && $read) ? sane_time($t/$read) : sane_time(0)) . "\n";
+
+if ($config{commentsdump}) {
+	for (sort { $comments{$b} <=> $comments{$a} } keys %comments) {
+
+		printf("COMMENTS: %.8d %s\n", $comments{$_}, $_) if length $_;
+	}
+}
+
+if ($config{artistdump}) {
+	for (sort { $artists{$b}{count} <=> $artists{$a}{count} } keys %artists) {
+		printf("%s %d [%d%% pic] %s\n", $_, $artists{$_}{count}, ($artists{$_}{pic} / $artists{$_}{count}) * 100, sane_time($artists{$_}{time}));
+	}
+}
+
+exit 0;
+
+sub flac_inf {
+	my $f = shift;
+	my $a;
+
+	$links++ if -l $f;
+	$files++ if !-l $f && -f $f;
+
+	if ($f !~ /\.flac$/) {
+		#print STDERR "Ignore $f\n";
+		$dudl++ if -l $f;
+		$dudf++ if !-l $f;
+		return 0;
+	}
+
+	#warn "flac_inf with $f";
+
+	return if -l $f;
+
+	my ($info, $t, $flach, $flact);
+
+	if ($flach = Audio::FLAC::Header->new($f)) {
+		if ($flach->picture()) {
+		my $picc = $flach->picture('all');
+		warn join(' ',(scalar @$picc), "pictures for $f") if @$picc > 1;
+			next if $config{picmode} eq 'P';
+		} else {
+			next if $config{picmode} eq 'p';
+		}
+		$pic++ if $flach->picture();
+		$info = $flach->info();
+		$read++;
+		$osize += ($$info{NUMCHANNELS} * $$info{TOTALSAMPLES} * ( $$info{BITSPERSAMPLE} / 8 ));
+		$size+= -s $f if !-l $f;
+		$t = $$info{TOTALSAMPLES} / $$info{SAMPLERATE};
+		if ($flact = $flach->tags()) {
+			$a = get_tag($flact,'artist');
+			$artists{$a}{count}++;
+			$comments{get_tag($flact,'comment')}++;
+			$a = get_tag($flact,'artist');
+			$artists{$a}{time}+=$t;;
+			$artists{$a}{pic}++ if $flach->picture();
+			print ("$f: (" . sane_time($t) .
+			 ") artist: \"$a\", album \"" . 
+			get_tag($flact,'album') . "\"\n") if $config{verbose};
+		}
+		gent(-1, \$min, $t, \$mint, $flact);
+		gent(1,  \$max, $t, \$maxt, $flact);
+		return ($t, 1, -s $f ? -s $f : 0);
+ 	}
+
+ 	warn "Can't get header for $f";
+ 	return (0,0,0);
+}
+
+sub process_dir {
+	my $dir = shift;
+	my ($t, $f, $b) = (0,0,0);
+	my ($d, $i) = (0,0);
+
+	$dir =~s#/+#/#og;
+
+	#warn "process_dir with $dir\n";
+	if (! -d $dir) {
+		#warn "$dir isn't a directory";
+		my @s = flac_inf($dir);
+		$d += $s[0];
+		$f += $s[1];
+		$b += $s[2];
+		print "$dir: " . sane_time($d) . "\n" unless $config{verbose};
+		return ($d,1,-s $dir);
+	}
+
+	if (! opendir(D, $dir)) {
+		warn "Can't open $dir - $!";
+		return;
+	}
+
+	$dirs++;
+	for (sort grep !/^\.\.?$/, readdir(D)) {
+		my @s =  -d "$dir/$_" ? process_dir("$dir/$_") : flac_inf("$dir/$_");
+		$t+=$s[0];
+		$f+=$s[1];
+		$b+=$s[2];
+	}
+	closedir(D);
+
+	return $t if $t == 0 && $config{nozeroes};
+	print "$dir: " . sane_time($t) . " ( " . plural($f, 'flac') . ", " . sane_size($b) . " / $b bytes )\n";
+	return ($t, $f, $b);
+}
+
+__END__
+
+=head1 NAME
+
+flactime - produce summary information for a series of flac files.
+
+=head1 DESCRIPTION
+
+flactime summarises flac playlist length, in months/weeks/minutes/days/fraction
+of years. Also detail whether a flac has a picture.
+
+=head1 USAGE
+	
+	flactime [options] /dir foo.flac ~/[a-m]*flac
+
+	Where options are:
+
+	-p - only summarise flacs with pictures (default all)
+	-p - only summarise flacs without pictures (default all)
+	-z - don't report 0 second leafs/files (default - report everything)
+	-v - be verbose; summarise files in a directory and not
+	     just the directory (and its leafs)
+
+	The defaults behaviour of flactime /dir foo.flac ~/[a-m]*flac
+	is to summaries for each directory under /dir, report on size
+	for foo.flac and for any files matching the wildcard,
+	and to finish with a total time for the whole lot, together with
+	some converted stats and picture information.
+
+=head1 WARRANTY
+
+This is free software.  This comes with no warranty whatsoever.
+
+=head1 AUTHORS
+
+	Andrew White (andy@milky.org.uk)
+=cut

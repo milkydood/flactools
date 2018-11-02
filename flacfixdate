@@ -1,0 +1,34 @@
+#!/usr/bin/perl
+
+use Audio::FLAC::Header;
+use strict;
+
+my ($f, $dst, $flac, $a, $m, $c);
+
+while ($dst = shift @ARGV) {
+	if (! -f $dst) {
+		warn "can't find $dst";
+		next;
+	}
+
+	($a, $m) = (stat($dst))[8,9];
+
+	if (! ($flac = Audio::FLAC::Header->new($dst))) {
+		warn "Couldn't get header for $f";
+		next;
+	}
+
+	if (! ($f = $flac->tags()) ) {
+ 		warn "Can't get flac tags - $!";
+		next;
+	}
+
+	if (exists $$f{'Year'} && ! exists $$f{'Date'}) {
+		$$f{'Date'}	= delete $$f{'Year'};
+
+		$flac->write() || warn $!;
+		utime $a, $m, $dst;
+	}
+}
+
+exit 0;

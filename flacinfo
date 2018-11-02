@@ -1,0 +1,50 @@
+#!/usr/bin/perl
+
+use lib "$ENV{HOME}/lib/perl5";
+
+use AW::Flacutil qw(:all sane_size);
+
+use Audio::FLAC::Header;
+use Encode;
+
+my $flac;
+
+for (@ARGV) {
+	if ($flac = Audio::FLAC::Header->new("$_")) {
+		flac_inf($flac,"$_");
+		flac_tags($flac);
+	} else {
+		warn "Can't open $_";
+		next;
+	}
+
+}
+
+sub flac_inf {
+	my $info = (my $head = shift)->info();
+	my $file = shift;
+	my $osize = $$info{NUMCHANNELS} * $$info{TOTALSAMPLES} *
+		( $$info{BITSPERSAMPLE} / 8 );
+	my $csize = -s $file;
+	my $t = $$info{TOTALSAMPLES} / $$info{SAMPLERATE};
+
+	for (keys %$info) {
+		print "INF| $_: $info->{$_}\n";
+	}
+
+
+	print "INF| originalsize: $osize (" . sane_size($osize) . ")\n";
+	print "INF| flacsize: $csize (" . sane_size($csize) . ")\n";
+	printf("INF| ratio: %.2f%\n", (100 * $csize / $osize));
+	print "INF| time: " . int($t+.5) ."s\n";
+	print "INF| sanetime: " . sane_time($t) . "\n";
+	print "INF| Picture? " . ($head->picture() ? 'Yes' : 'No') . "\n";
+}
+
+sub flac_tags {
+	my $tags = (shift)->tags();
+
+	for (sort keys %$tags) {
+		print "TAG| $_: " . decode("iso-8859-1",$tags->{$_}) . "\n";
+	}
+}
