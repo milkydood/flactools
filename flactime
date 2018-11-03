@@ -88,8 +88,8 @@ sub flac_inf {
 
 	if ($flach = Audio::FLAC::Header->new($f)) {
 		if ($flach->picture()) {
-		my $picc = $flach->picture('all');
-		warn join(' ',(scalar @$picc), "pictures for $f") if @$picc > 1;
+			my $picc = $flach->picture('all');
+			warn join(' ',(scalar @$picc), "pictures for $f") if @$picc > 1;
 			next if $config{picmode} eq 'P';
 		} else {
 			next if $config{picmode} eq 'p';
@@ -174,8 +174,8 @@ of years. Also detail whether a flac has a picture.
 
 	Where options are:
 
-	-p - only summarise flacs with pictures (default all)
-	-p - only summarise flacs without pictures (default all)
+	-p - only summarise flacs with pictures (default all flacs)
+	-P - only summarise flacs without pictures (default all flacs)
 	-z - don't report 0 second leafs/files (default - report everything)
 	-v - be verbose; summarise files in a directory and not
 	     just the directory (and its leafs)
