@@ -6,43 +6,43 @@ use vars qw($VERSION @ISA @EXPORT_OK %EXPORT_TAGS);
 
 
 $VERSION     = 1.00;
-@ISA         = qw(Exporter);
+@ISA	 = qw(Exporter);
 @EXPORT_OK = qw(sane_size sane_time plural min max gent get_tag);
 %EXPORT_TAGS = ( all => [qw(sane_size sane_time plural min max gent get_tag)] );
 my @t = qw(year 31557600 month 2627994 week 604800 day 86400 hour 3600 minute 60);
 
 sub get_tag  {
-        my $tref = shift;
-        my $tag = shift;
-        my @at = grep { /^$tag$/i }  keys %$tref;
-        if (@at > 1) {
-                warn "> 1 $tag tag; got " .
-                        (join", ", map {"$_: $$tref{$_}"} @at) .
-                        "\n";
-        }
+	my $tref = shift;
+	my $tag = shift;
+	my @at = grep { /^$tag$/i }  keys %$tref;
+	if (@at > 1) {
+		warn "> 1 $tag tag; got " .
+			(join", ", map {"$_: $$tref{$_}"} @at) .
+			"\n";
+	}
 
-        return $$tref{$at[0]};
+	return $$tref{$at[0]};
 }
 
 sub sane_time {
-        my $t = shift;
-        my ($u, $v, @o, $c);
+	my $t = shift;
+	my ($u, $v, @o, $c);
 	my @x=@t; # nasty
 
-        while ($u = shift @x) {
-                $v = shift @x;
-                $c = int($t/$v);
+	while ($u = shift @x) {
+		$v = shift @x;
+		$c = int($t/$v);
 
-                if ($c) {
-                        $t-=$c*$v;
-                        push @o, plural($c, $u);
-                }
-        }
+		if ($c) {
+			$t-=$c*$v;
+			push @o, plural($c, $u);
+		}
+	}
 
 	push @o, plural(int($t),'second');
 
 	return $o[0] unless scalar @o > 1;
-        return join(' and ',join(', ',@o[0 .. $#o -1]), $o[-1]);
+	return join(' and ',join(', ',@o[0 .. $#o -1]), $o[-1]);
 }
 
 sub plural {
