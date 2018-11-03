@@ -18,7 +18,7 @@
 
 [flactest](flactest) - Test for broken flac files - report any that are broken, or all ok.
 
-[flactime](flactime) - give a series of filespecs (dirs/individual flac files), report a whole bunch of stats.
+[flactime](flactime) - given a series of filespecs (dirs/individual flac files), report a whole bunch of stats.
 
 [flac_track_number_from_playlist_order](flac_track_number_from_playlist_order) - write out an ever-increasing tracknumber from the filenames in the given playlist.
 
