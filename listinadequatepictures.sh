@@ -9,5 +9,5 @@ for flacpath in "$@"; do
                 elif [ ${D[0]} -lt 300 -o ${D[1]} -lt 300 ]; then
                         echo "$file (${D[0]}x${D[1]})"
                 fi
-        done < <(find $flacpath -type f -name '*flac' -print0)
+        done < <(find "$flacpath" -type f -name '*flac' -print0)
 done
